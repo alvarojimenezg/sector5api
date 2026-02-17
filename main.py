@@ -14,7 +14,7 @@ from database import SessionLocal, metadata
 app = FastAPI()
 
 HTTP_TIMEOUT_SECONDS = float(os.getenv("FIVEM_HTTP_TIMEOUT", "5"))
-DEFAULT_FIVEM_SERVER_URL = os.getenv("FIVEM_SERVER_URL", "http://localhost:30120")
+DEFAULT_FIVEM_SERVER_URL = os.getenv("FIVEM_SERVER_URL")
 
 
 def get_db():
