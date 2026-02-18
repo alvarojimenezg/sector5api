@@ -28,6 +28,7 @@ def get_db():
 db_dependency = Annotated[Session, Depends(get_db)]
 
 
+#Normalize FiveM Server URL
 def normalize_base_url(url: str) -> str:
     clean_url = (url or "").strip().rstrip("/")
     if not clean_url:
@@ -42,6 +43,7 @@ def normalize_base_url(url: str) -> str:
     return urlunparse((parsed.scheme, parsed.netloc, "", "", "", "")).rstrip("/")
 
 
+#Build Fivem Server URL Candidates
 def build_fivem_candidates(base_url: str) -> list[str]:
     normalized = normalize_base_url(base_url)
     parsed = urlparse(normalized)
@@ -173,29 +175,56 @@ def collect_fivem_overview(base_url: str) -> dict[str, Any]:
         "error": errors[-1] if errors else "No se pudo conectar con FiveM.",
     }
 
+def fetch_all(db: Session, table_name: str) -> list[dict]:
+    table = metadata.tables[table_name]
+    query = select(table)
+    result = db.execute(query)
+    return [dict(row._mapping) for row in result.fetchall()]
 
+def fetch_one(db: Session, table_name: str, column: str, value) -> dict:
+    table = metadata.tables[table_name]
+    query = select(table).where(table.c[column] == value)
+    result = db.execute(query)
+    row = result.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"{table_name} record not found")
+    return dict(row._mapping)
+
+def fetch_many(db: Session, table_name: str, column: str, value) -> dict:
+    table = metadata.tables[table_name]
+    query = select(table).where(table.c[column] == value)
+    result = db.execute(query)
+    return [dict(row._mapping) for row in result.fetchall()]
+
+#USER RELATED ENDPOINTS
 @app.get("/users", status_code=status.HTTP_200_OK)
 async def get_all_users(db: db_dependency):
-    users_table = metadata.tables["users"]
-    query = select(users_table)
-    result = db.execute(query)
-    users = result.fetchall()
-    users_list = [dict(row._mapping) for row in users]
-    return {"users": users_list}
+    return {"users": fetch_all(db, "users")}
 
+@app.get("/users/by-id/{userId}", status_code=status.HTTP_200_OK)
+async def get_user_by_id(userId: str, db: db_dependency):
+    return {"user": fetch_one(db, "users", "userId", userId)}
 
-@app.get("/users/by-identifier/{identifier}", status_code=status.HTTP_200_OK)
-async def get_user_by_identifier(identifier: str, db: db_dependency):
-    users_table = metadata.tables["users"]
-    query = select(users_table).where(users_table.c.identifier == identifier)
-    result = db.execute(query)
-    user = result.fetchone()
+#PLAYER RELATED ENDPOINTS
+@app.get("/players", status_code=status.HTTP_200_OK)
+async def get_all_players(db: db_dependency):
+    return {"players": fetch_all(db, "players")}
 
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+@app.get("/players/properties", status_code=status.HTTP_200_OK)
+async def get_all_properties(db: db_dependency):
+    return {"properties": fetch_all(db, "properties")}
 
-    return {"user": dict(user._mapping)}
+@app.get("/players/by-id/{owner}/properties", status_code=status.HTTP_200_OK)
+async def get_player_owned_properties(owner: str, db: db_dependency):
+    return {"properties": fetch_many(db, "properties", "owner", owner)}
 
+@app.get("/players/vehicles", status_code=status.HTTP_200_OK)
+async def get_all_player_vehicles(db: db_dependency):
+    return {"player_vehicles": fetch_all(db, "player_vehicles")}
+
+@app.get("/players/by-id/{citizenid}/vehicles", status_code=status.HTTP_200_OK)
+async def get_player_vehicles(citizenid: str, db: db_dependency):
+    return {"player_vehicles": fetch_many(db, "player_vehicles", "citizenid", citizenid)}
 
 @app.get("/server/overview", status_code=status.HTTP_200_OK)
 async def get_server_overview():
